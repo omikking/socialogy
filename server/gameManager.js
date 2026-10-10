@@ -128,15 +128,6 @@ function getPublicPlayers(room) {
 function assignRoles(room) {
   const playerIds = room.players.map((p) => p.id);
 
-  // Rotate storyteller
-  if (room.storytellerOrder.length === 0) {
-    room.storytellerOrder = [...playerIds].sort(() => Math.random() - 0.5);
-  }
-
-  const stIdx = (room.roundNumber - 1) % room.storytellerOrder.length;
-  room.storytellerId = room.storytellerOrder[stIdx];
-
-  // If storyteller left, pick next
   if (room.gameMode === "CATEGORY_IMPOSTER") {
     room.storytellerId = null;
     const eligible = playerIds;
