@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { socket } from './socket';
 
 import HomePage from './components/HomePage';
@@ -64,9 +64,37 @@ function App() {
   // Error
   const [error, setError] = useState('');
 
-  // Connect socket on mount
+  // Save session when in game
+  useEffect(() => {
+    if (playerId && roomCode) {
+      localStorage.setItem('socialogy_session', JSON.stringify({ playerId, roomCode, playerName }));
+    }
+  }, [playerId, roomCode, playerName]);
+
+  // Connect socket and try auto-rejoining on mount
   useEffect(() => {
     socket.connect();
+
+    const saved = localStorage.getItem('socialogy_session');
+    if (saved) {
+      try {
+        const { playerId: savedId, roomCode: savedCode, playerName: savedName } = JSON.parse(saved);
+        if (savedId && savedCode) {
+          socket.emit('REJOIN_ROOM', { roomCode: savedCode, playerId: savedId, playerName: savedName }, (res) => {
+            if (res && res.ok) {
+              setPlayerId(res.playerId);
+              setRoomCode(res.roomCode);
+              if (res.playerName) setPlayerName(res.playerName);
+              setView('game');
+            } else {
+              localStorage.removeItem('socialogy_session');
+            }
+          });
+        }
+      } catch (e) {
+        localStorage.removeItem('socialogy_session');
+      }
+    }
 
     return () => {
       socket.disconnect();
@@ -145,6 +173,7 @@ function App() {
     }
 
     function onKicked() {
+      localStorage.removeItem('socialogy_session');
       setView('home');
       setRoomState(null);
       setPlayerId(null);
@@ -246,6 +275,10 @@ function App() {
 
   const handleSkipToVoting = useCallback(() => {
     socket.emit('SKIP_TO_VOTING', { roomCode });
+  }, [roomCode]);
+
+  const handleForceNextPhase = useCallback(() => {
+    socket.emit('FORCE_NEXT_PHASE', { roomCode });
   }, [roomCode]);
 
   const handleSendChat = useCallback((message) => {
@@ -370,6 +403,8 @@ function App() {
   const isHost = roomState.hostId === playerId;
   const isStoryteller = roomState.storytellerId === playerId;
   const isCategoryMode = roomState.gameMode === 'CATEGORY_IMPOSTER';
+  const me = roomState.players.find(p => p.id === playerId);
+  const isSpectating = Boolean(me?.isSpectating);
 
   // LOBBY
   if (gameState === 'LOBBY') {
@@ -382,6 +417,26 @@ function App() {
         onUpdateSettings={handleUpdateSettings}
         onKickPlayer={handleKickPlayer}
       />
+    );
+  }
+
+  // Mid-game spectator banner view
+  if (isSpectating) {
+    return (
+      <div className="page">
+        <div className="container animate-in">
+          <PhaseHeader roomState={roomState} />
+          <div className="glass-card" style={{ padding: '32px 20px', textAlign: 'center' }}>
+            <span className="badge badge-amber" style={{ fontSize: '0.9rem', padding: '8px 20px', marginBottom: 16, display: 'inline-block' }}>
+              🍿 Spectating Current Round
+            </span>
+            <h3 style={{ marginTop: 12 }}>Game is currently in progress!</h3>
+            <p style={{ color: 'var(--text-secondary)', marginTop: 8 }}>
+              You joined mid-game. You will automatically enter the match when the next round starts!
+            </p>
+          </div>
+        </div>
+      </div>
     );
   }
 
@@ -404,8 +459,11 @@ function App() {
         <StorytellerPick
           roomState={roomState}
           wordCards={wordCards}
+          isHost={isHost}
           onSelect={handleStorytellerSelect}
           onRequestCards={handleRequestCards}
+          onForceNextPhase={handleForceNextPhase}
+          onKickPlayer={handleKickPlayer}
         />
       );
     }
@@ -426,7 +484,7 @@ function App() {
     if (isStoryteller) {
       return (
         <div className="page">
-          <div className="container">
+          <div className="container" style={{ maxWidth: 640 }}>
             <PhaseHeader roomState={roomState} />
             <div className="glass-card-glow secret-word-display">
               <div className="secret-word-label">You are the Storyteller</div>
@@ -441,10 +499,20 @@ function App() {
                 </div>
               </div>
             </div>
+
+            {/* Host Controls */}
+            {isHost && (
+              <div style={{ marginTop: 16, display: 'flex', gap: 12, justifyContent: 'center' }}>
+                <button className="btn btn-sm btn-primary" style={{ background: 'var(--accent-rose)' }} onClick={handleForceNextPhase}>
+                  ⚡ Force Next Phase
+                </button>
+              </div>
+            )}
+
             <WaitingScreen text="Waiting for players to choose their cards..." />
             <div className="answers-list stagger">
               {roomState.players
-                .filter(p => p.id !== roomState.storytellerId)
+                .filter(p => p.id !== roomState.storytellerId && !p.isSpectating)
                 .map(p => (
                   <div className="answer-item" key={p.id}>
                     <span className="answer-player">{p.name}</span>
@@ -465,9 +533,12 @@ function App() {
         wordCards={wordCards}
         selectedCard={selectedCard}
         answerLocked={answerLocked}
+        isHost={isHost}
         onSelectCard={handleSelectCard}
         onLockAnswer={handleLockAnswer}
         onRequestCards={handleRequestCards}
+        onForceNextPhase={handleForceNextPhase}
+        onKickPlayer={handleKickPlayer}
       />
     );
   }
@@ -494,7 +565,7 @@ function App() {
         isHost={isHost}
         isStoryteller={isStoryteller}
         answers={revealedAnswers}
-        commonWord={commonWord || roomState.commonWord}
+        commonWord={commonWord || secretWord || roomState.commonWord}
         chatMessages={chatMessages}
         onSendChat={handleSendChat}
         onSkipToVoting={handleSkipToVoting}
@@ -508,11 +579,14 @@ function App() {
       <Voting
         roomState={roomState}
         playerId={playerId}
+        isHost={isHost}
         isStoryteller={isStoryteller}
         commonWord={commonWord || roomState.commonWord}
         votedFor={votedFor}
         voteLocked={voteLocked}
         onVote={handleCastVote}
+        onForceNextPhase={handleForceNextPhase}
+        onKickPlayer={handleKickPlayer}
       />
     );
   }

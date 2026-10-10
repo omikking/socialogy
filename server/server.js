@@ -21,12 +21,17 @@ import {
   isGameFinished,
   finishGame,
   resetGame,
+  forceNextPhase,
 } from "./gameManager.js";
 
 import { getAllCategories } from "./categories.js";
 
 const app = express();
 app.use(cors());
+
+app.get("/", (req, res) => {
+  res.send("🚀 Secret Word Imposter server is running!");
+});
 
 const httpServer = createServer(app);
 const io = new Server(httpServer, {
@@ -53,6 +58,7 @@ function broadcastRoomState(room) {
     code: room.code,
     hostId: room.hostId,
     gameMode: room.gameMode,
+    cardDistribution: room.cardDistribution || "SAME_30",
     selectedCategory: room.selectedCategory,
     categoryName: room.categoryName,
     skipTyping: room.skipTyping,
@@ -174,14 +180,53 @@ io.on("connection", (socket) => {
     broadcastRoomState(room);
   });
 
+  // ── REJOIN ROOM ──
+  socket.on("REJOIN_ROOM", ({ roomCode, playerId, playerName }, callback) => {
+    const code = roomCode?.toUpperCase();
+    const room = getRoom(code);
+
+    if (!room) return callback && callback({ ok: false, error: "Room not found" });
+
+    let player = room.players.find((p) => p.id === playerId);
+    if (!player && playerName) {
+      player = addPlayer(room, playerId, playerName);
+    }
+
+    if (!player) return callback && callback({ ok: false, error: "Could not rejoin" });
+
+    player.connected = true;
+    socketPlayerMap.set(socket.id, { playerId: player.id, roomCode: code });
+    socket.join(code);
+
+    if (callback) callback({ ok: true, roomCode: code, playerId: player.id, playerName: player.name });
+
+    broadcastRoomState(room);
+
+    // If game in progress, send secret role/cards data
+    if (room.gameState !== GameState.LOBBY) {
+      const isStoryteller = player.id === room.storytellerId;
+      const isImposter = player.id === room.imposterId;
+      const cards = player.wordCards || [];
+
+      socket.emit("ROLE_ASSIGNED", {
+        role: isStoryteller ? "STORYTELLER" : isImposter ? "IMPOSTER" : "PLAYER",
+        secretWord: isStoryteller ? null : isImposter ? room.imposterWord : room.commonWord,
+        commonWord: isStoryteller ? room.commonWord : null,
+        imposterWord: isStoryteller ? room.imposterWord : null,
+        wordCards: cards,
+      });
+      if (cards.length > 0) {
+        socket.emit("WORD_CARDS", { cards });
+      }
+    }
+  });
+
   // ── JOIN ROOM ──
   socket.on("JOIN_ROOM", ({ roomCode, playerName }, callback) => {
     const code = roomCode?.toUpperCase();
     const room = getRoom(code);
 
     if (!room) return callback({ ok: false, error: "Room not found" });
-    if (room.gameState !== GameState.LOBBY)
-      return callback({ ok: false, error: "Game already in progress" });
     if (room.players.length >= 10)
       return callback({ ok: false, error: "Room is full" });
 
@@ -197,7 +242,7 @@ io.on("connection", (socket) => {
   });
 
   // ── UPDATE SETTINGS ──
-  socket.on("UPDATE_SETTINGS", ({ roomCode, maxRounds, selectedCategory, skipTyping, gameMode }) => {
+  socket.on("UPDATE_SETTINGS", ({ roomCode, maxRounds, selectedCategory, skipTyping, gameMode, cardDistribution }) => {
     const room = getRoom(roomCode);
     if (!room || room.gameState !== GameState.LOBBY) return;
     if (socket.id !== room.hostId) return;
@@ -207,6 +252,9 @@ io.on("connection", (socket) => {
     if (skipTyping !== undefined) room.skipTyping = Boolean(skipTyping);
     if (gameMode && (gameMode === "SOCIAL_DEDUCTION" || gameMode === "CATEGORY_IMPOSTER")) {
       room.gameMode = gameMode;
+    }
+    if (cardDistribution && (cardDistribution === "SAME_30" || cardDistribution === "DIFFERENT_30")) {
+      room.cardDistribution = cardDistribution;
     }
 
     broadcastRoomState(room);
@@ -301,7 +349,12 @@ io.on("connection", (socket) => {
   // ── START DISCUSSION ──
   socket.on("START_DISCUSSION", ({ roomCode }) => {
     const room = getRoom(roomCode);
-    if (!room || room.gameState !== GameState.REVEAL) return;
+    if (!room) return;
+    if (
+      room.gameState !== GameState.REVEAL &&
+      room.gameState !== GameState.SECRET_WORD &&
+      room.gameState !== GameState.ROLE_ASSIGNMENT
+    ) return;
 
     startDiscussion(room);
     broadcastRoomState(room);
@@ -410,10 +463,36 @@ io.on("connection", (socket) => {
     broadcastRoomState(room);
   });
 
-  // ── KICK PLAYER ──
+  // ── FORCE NEXT PHASE (HOST ACTION) ──
+  socket.on("FORCE_NEXT_PHASE", ({ roomCode }) => {
+    const room = getRoom(roomCode);
+    if (!room) return;
+    if (socket.id !== room.hostId) return;
+
+    const res = forceNextPhase(room);
+    if (res && res.tally) {
+      const roundResult = tallyVotes(room);
+      broadcastRoomState(room);
+      io.to(roomCode).emit("ROUND_RESULT", roundResult);
+    } else {
+      broadcastRoomState(room);
+      if (room.gameState === GameState.CARD_SELECTION) {
+        sendSecretWordsAndCards(room);
+      } else if (room.gameState === GameState.REVEAL) {
+        io.to(roomCode).emit("ANSWERS_REVEALED", {
+          answers: getAnswersForReveal(room),
+          commonWord: room.commonWord,
+        });
+      } else if (room.gameState === GameState.VOTING) {
+        io.to(roomCode).emit("VOTING_STARTED", {});
+      }
+    }
+  });
+
+  // ── KICK PLAYER (ANY PHASE) ──
   socket.on("KICK_PLAYER", ({ roomCode, targetId }) => {
     const room = getRoom(roomCode);
-    if (!room || room.gameState !== GameState.LOBBY) return;
+    if (!room) return;
     if (socket.id !== room.hostId) return;
     if (targetId === room.hostId) return;
 
@@ -424,6 +503,31 @@ io.on("connection", (socket) => {
       targetSocket.leave(roomCode);
       socketPlayerMap.delete(targetSocket.id);
     }
+
+    // Auto-advance if remaining players finished phase
+    if (room.gameState === GameState.CARD_SELECTION) {
+      const activeEligible = room.players.filter(
+        (p) => p.id !== room.storytellerId && !p.isSpectating
+      );
+      if (activeEligible.length > 0 && activeEligible.every((p) => p.answerLocked)) {
+        room.gameState = GameState.REVEAL;
+        io.to(roomCode).emit("ANSWERS_REVEALED", {
+          answers: getAnswersForReveal(room),
+          commonWord: room.commonWord,
+        });
+      }
+    } else if (room.gameState === GameState.VOTING) {
+      const eligibleVoters = room.players.filter(
+        (p) => p.id !== room.storytellerId && !p.isSpectating
+      );
+      if (eligibleVoters.length > 0 && eligibleVoters.every((p) => p.voteLocked)) {
+        const roundResult = tallyVotes(room);
+        broadcastRoomState(room);
+        io.to(roomCode).emit("ROUND_RESULT", roundResult);
+        return;
+      }
+    }
+
     broadcastRoomState(room);
   });
 
@@ -439,10 +543,6 @@ io.on("connection", (socket) => {
     const player = room.players.find((p) => p.id === mapping.playerId);
     if (player) {
       player.connected = false;
-
-      if (room.gameState === GameState.LOBBY) {
-        removePlayer(room, mapping.playerId);
-      }
     }
 
     socketPlayerMap.delete(socket.id);

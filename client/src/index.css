@@ -1385,6 +1385,70 @@ h1, h2, h3, h4 {
 
 @media (min-width: 768px) {
   .word-cards-grid {
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(6, 1fr);
   }
+}
+
+/* ─── 30-Word Grid (Single Page Layout) ────────────────────────── */
+.word-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 8px;
+  width: 100%;
+  max-width: 760px;
+  margin: 0 auto 16px auto;
+}
+
+@media (max-width: 640px) {
+  .word-cards-grid {
+    grid-template-columns: repeat(4, 1fr);
+    gap: 6px;
+  }
+}
+
+@media (max-width: 400px) {
+  .word-cards-grid {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 4px;
+  }
+}
+
+.word-card {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  padding: 8px 4px;
+  text-align: center;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-primary, #fff);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  user-select: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 42px;
+  word-break: break-word;
+}
+
+.word-card:hover {
+  background: rgba(139, 92, 246, 0.2);
+  border-color: var(--accent-purple, #8b5cf6);
+  transform: translateY(-2px);
+}
+
+.word-card.selected {
+  background: rgba(6, 182, 212, 0.25) !important;
+  border-color: var(--accent-cyan, #06b6d4) !important;
+  box-shadow: 0 0 12px rgba(6, 182, 212, 0.4);
+  color: #fff;
+  font-weight: 700;
+}
+
+.word-card-locked {
+  opacity: 0.7;
+  cursor: default;
+  transform: none !important;
 }

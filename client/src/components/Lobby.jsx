@@ -143,6 +143,22 @@ export default function Lobby({ roomState, playerId, isHost, onStartGame, onUpda
                   </>
                 )}
 
+                {/* Social Deduction Specific Settings */}
+                {roomState.gameMode === 'SOCIAL_DEDUCTION' && (
+                  <div className="setting-row">
+                    <span className="setting-label">Word Grid Mode</span>
+                    <select
+                      className="input"
+                      style={{ width: 'auto', padding: '0.4rem 0.8rem', fontSize: '0.85rem', borderRadius: '0.5rem' }}
+                      value={roomState.cardDistribution || 'SAME_30'}
+                      onChange={(e) => onUpdateSettings({ cardDistribution: e.target.value })}
+                    >
+                      <option value="SAME_30">📋 30 Same Words (Everyone gets same grid)</option>
+                      <option value="DIFFERENT_30">🔀 30 Unique Words (Different grid per player)</option>
+                    </select>
+                  </div>
+                )}
+
                 <div className="setting-row">
                   <span className="setting-label">Rounds</span>
                   <div className="setting-value">

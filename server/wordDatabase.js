@@ -74,23 +74,47 @@ export function shuffle(arr) {
 }
 
 /**
- * Assign 12 unique words to each player. No two players share a word.
- * Returns a Map of playerId → string[] (12 words).
+ * Assign 30 words to each player based on cardDistribution mode.
+ * - "SAME_30": Everyone gets the exact same 30 words.
+ * - "DIFFERENT_30": Each player gets 30 unique/different words.
+ * Returns a Map of playerId → string[] (30 words).
  */
-export function assignWordsToPlayers(playerIds) {
+export function assignWordsToPlayers(playerIds, cardDistribution = "SAME_30", wordsPerPlayer = 30) {
   const pool = shuffle(getUniquePool());
-  const wordsPerPlayer = 12;
-  const totalNeeded = playerIds.length * wordsPerPlayer;
 
-  if (pool.length < totalNeeded) {
-    throw new Error(`Not enough words in pool. Need ${totalNeeded}, have ${pool.length}.`);
-  }
+  if (cardDistribution === "SAME_30") {
+    if (pool.length < wordsPerPlayer) {
+      throw new Error(`Not enough words in pool. Need ${wordsPerPlayer}, have ${pool.length}.`);
+    }
+    const sameWords = pool.slice(0, wordsPerPlayer);
+    const assignments = new Map();
+    for (const pid of playerIds) {
+      assignments.set(pid, [...sameWords]);
+    }
+    return assignments;
+  } else {
+    const totalNeeded = playerIds.length * wordsPerPlayer;
+    if (pool.length < totalNeeded) {
+      // Fallback if pool is smaller than totalNeeded: reuse pool cleanly
+      const assignments = new Map();
+      let idx = 0;
+      for (const pid of playerIds) {
+        const words = [];
+        for (let i = 0; i < wordsPerPlayer; i++) {
+          words.push(pool[(idx + i) % pool.length]);
+        }
+        assignments.set(pid, words);
+        idx += wordsPerPlayer;
+      }
+      return assignments;
+    }
 
-  const assignments = new Map();
-  let idx = 0;
-  for (const pid of playerIds) {
-    assignments.set(pid, pool.slice(idx, idx + wordsPerPlayer));
-    idx += wordsPerPlayer;
+    const assignments = new Map();
+    let idx = 0;
+    for (const pid of playerIds) {
+      assignments.set(pid, pool.slice(idx, idx + wordsPerPlayer));
+      idx += wordsPerPlayer;
+    }
+    return assignments;
   }
-  return assignments;
 }
