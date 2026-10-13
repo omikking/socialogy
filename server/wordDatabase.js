@@ -1,13 +1,13 @@
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
+import { wordPool as directWordPool } from "./wordPool_everyday.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 /**
- * Load the curated everyday word pool EXCLUSIVELY from wordPool_everyday.ts.
- * Does NOT use wordPool.ts.
+ * Load the curated everyday word pool.
  */
 function loadWordPoolFromSource() {
   const tsPath = path.join(__dirname, "wordPool_everyday.ts");
@@ -24,12 +24,6 @@ function loadWordPoolFromSource() {
         const arrayStr = content.slice(startIdx, endIdx + 1);
         const parsed = new Function("return " + arrayStr)();
         if (Array.isArray(parsed) && parsed.length > 0) {
-          // Keep wordPool_everyday.js synchronized if needed for direct JS imports
-          if (!fs.existsSync(jsPath) && fs.existsSync(tsPath)) {
-            try {
-              fs.writeFileSync(jsPath, content, "utf8");
-            } catch {}
-          }
           return parsed;
         }
       }
@@ -41,7 +35,9 @@ function loadWordPoolFromSource() {
   return [];
 }
 
-export const wordPool = loadWordPoolFromSource();
+export const wordPool = (Array.isArray(directWordPool) && directWordPool.length > 0)
+  ? directWordPool
+  : loadWordPoolFromSource();
 
 /**
  * Remove duplicates from the word pool (case-insensitive).

@@ -25,6 +25,7 @@ import {
 } from "./gameManager.js";
 
 import { getAllCategories } from "./categories.js";
+import { getUniquePool, shuffle } from "./wordDatabase.js";
 
 const app = express();
 app.use(cors());
@@ -95,6 +96,40 @@ function findSocketForPlayer(playerId) {
   return null;
 }
 
+function getPlayerId(socket) {
+  const mapping = socketPlayerMap.get(socket.id);
+  return mapping ? mapping.playerId : socket.id;
+}
+
+function isHostSocket(socket, room) {
+  if (!room) return false;
+  const pid = getPlayerId(socket);
+  return pid === room.hostId || socket.id === room.hostId;
+}
+
+function ensurePlayerHas30Cards(room, player) {
+  if (!room || room.gameMode === "CATEGORY_IMPOSTER") return;
+  const isSame = (room.cardDistribution || "SAME_30") === "SAME_30";
+  if (isSame) {
+    if (!room.sharedWordCards || room.sharedWordCards.length < 30) {
+      const pool = shuffle(getUniquePool());
+      room.sharedWordCards = pool.slice(0, 30);
+    }
+    player.wordCards = [...room.sharedWordCards];
+    return;
+  }
+
+  if (!player.wordCards) player.wordCards = [];
+  if (player.wordCards.length < 30) {
+    const uniquePool = getUniquePool();
+    const existing = new Set(player.wordCards);
+    const available = shuffle(uniquePool.filter((w) => !existing.has(w)));
+    while (player.wordCards.length < 30 && available.length > 0) {
+      player.wordCards.push(available.pop());
+    }
+  }
+}
+
 /**
  * Send each player their role + word cards after round starts.
  */
@@ -116,6 +151,7 @@ function sendRoundStartData(room) {
   }
 
   room.players.forEach((p) => {
+    ensurePlayerHas30Cards(room, p);
     const s = findSocketForPlayer(p.id);
     if (!s) return;
 
@@ -140,7 +176,20 @@ function sendSecretWordsAndCards(room) {
     return;
   }
 
+  // Ensure SAME_30 distribution synchronizes identical cards for everyone
+  const isSame = (room.cardDistribution || "SAME_30") === "SAME_30";
+  if (isSame) {
+    if (!room.sharedWordCards || room.sharedWordCards.length < 30) {
+      const pool = shuffle(getUniquePool());
+      room.sharedWordCards = pool.slice(0, 30);
+    }
+    room.players.forEach((p) => {
+      p.wordCards = [...room.sharedWordCards];
+    });
+  }
+
   room.players.forEach((p) => {
+    ensurePlayerHas30Cards(room, p);
     const s = findSocketForPlayer(p.id);
     if (!s) return;
 
@@ -158,6 +207,7 @@ function sendSecretWordsAndCards(room) {
       s.emit("ROLE_ASSIGNED", {
         role: "PLAYER",
         secretWord,
+        wordCards: p.wordCards,
       });
       s.emit("WORD_CARDS", { cards: p.wordCards });
     }
@@ -171,7 +221,8 @@ io.on("connection", (socket) => {
   // ── CREATE ROOM ──
   socket.on("CREATE_ROOM", ({ playerName, gameMode }, callback) => {
     const playerId = socket.id;
-    const room = createRoom(playerId, playerName, gameMode);
+    const mode = gameMode === "CATEGORY_IMPOSTER" ? "CATEGORY_IMPOSTER" : "SOCIAL_DEDUCTION";
+    const room = createRoom(playerId, playerName, mode);
 
     socketPlayerMap.set(socket.id, { playerId, roomCode: room.code });
     socket.join(room.code);
@@ -198,12 +249,17 @@ io.on("connection", (socket) => {
     socketPlayerMap.set(socket.id, { playerId: player.id, roomCode: code });
     socket.join(code);
 
+    if (player.isHost) {
+      room.hostId = player.id;
+    }
+
     if (callback) callback({ ok: true, roomCode: code, playerId: player.id, playerName: player.name });
 
     broadcastRoomState(room);
 
     // If game in progress, send secret role/cards data
     if (room.gameState !== GameState.LOBBY) {
+      ensurePlayerHas30Cards(room, player);
       const isStoryteller = player.id === room.storytellerId;
       const isImposter = player.id === room.imposterId;
       const cards = player.wordCards || [];
@@ -245,7 +301,7 @@ io.on("connection", (socket) => {
   socket.on("UPDATE_SETTINGS", ({ roomCode, maxRounds, selectedCategory, skipTyping, gameMode, cardDistribution }) => {
     const room = getRoom(roomCode);
     if (!room || room.gameState !== GameState.LOBBY) return;
-    if (socket.id !== room.hostId) return;
+    if (!isHostSocket(socket, room)) return;
 
     if (maxRounds) room.maxRounds = Math.max(1, Math.min(10, maxRounds));
     if (selectedCategory !== undefined) room.selectedCategory = selectedCategory;
@@ -264,7 +320,7 @@ io.on("connection", (socket) => {
   socket.on("START_GAME", ({ roomCode }) => {
     const room = getRoom(roomCode);
     if (!room) return;
-    if (socket.id !== room.hostId) return;
+    if (!isHostSocket(socket, room)) return;
 
     const minPlayers = room.gameMode === "CATEGORY_IMPOSTER" ? 3 : 4;
     if (room.players.length < minPlayers) return;
@@ -274,11 +330,12 @@ io.on("connection", (socket) => {
     sendRoundStartData(room);
   });
 
-  // ── STORYTELLER SELECTS 2 WORDS FROM THEIR 12 CARDS ──
+  // ── STORYTELLER SELECTS 2 WORDS FROM THEIR 30 CARDS ──
   socket.on("STORYTELLER_SELECT", ({ roomCode, commonWord, imposterWord }) => {
     const room = getRoom(roomCode);
     if (!room) return;
-    if (socket.id !== room.storytellerId) return;
+    const pid = getPlayerId(socket);
+    if (pid !== room.storytellerId && socket.id !== room.storytellerId) return;
     if (room.gameState !== GameState.STORYTELLER_PICK) return;
 
     const ok = storytellerSelectWords(room, commonWord, imposterWord);
@@ -301,6 +358,7 @@ io.on("connection", (socket) => {
     const isStoryteller = player.id === room.storytellerId;
     const isImposter = player.id === room.imposterId;
 
+    ensurePlayerHas30Cards(room, player);
     const cards = player.wordCards && player.wordCards.length > 0 ? player.wordCards : [];
     const data = {
       ok: true,
@@ -326,7 +384,8 @@ io.on("connection", (socket) => {
     const room = getRoom(roomCode);
     if (!room || room.gameState !== GameState.CARD_SELECTION) return;
 
-    selectCard(room, socket.id, card);
+    const pid = getPlayerId(socket);
+    selectCard(room, pid, card);
     broadcastRoomState(room);
   });
 
@@ -335,7 +394,8 @@ io.on("connection", (socket) => {
     const room = getRoom(roomCode);
     if (!room || room.gameState !== GameState.CARD_SELECTION) return;
 
-    const allLocked = lockAnswer(room, socket.id);
+    const pid = getPlayerId(socket);
+    const allLocked = lockAnswer(room, pid);
     broadcastRoomState(room);
 
     if (allLocked) {
@@ -373,7 +433,7 @@ io.on("connection", (socket) => {
   socket.on("SKIP_TO_VOTING", ({ roomCode }) => {
     const room = getRoom(roomCode);
     if (!room || room.gameState !== GameState.DISCUSSION) return;
-    if (socket.id !== room.hostId) return;
+    if (!isHostSocket(socket, room)) return;
 
     startVoting(room);
     broadcastRoomState(room);
@@ -385,10 +445,11 @@ io.on("connection", (socket) => {
     const room = getRoom(roomCode);
     if (!room) return;
     if (room.gameState !== GameState.DISCUSSION) return;
+    const pid = getPlayerId(socket);
     // Storyteller cannot chat during discussion
-    if (socket.id === room.storytellerId) return;
+    if (pid === room.storytellerId || socket.id === room.storytellerId) return;
 
-    const player = room.players.find((p) => p.id === socket.id);
+    const player = room.players.find((p) => p.id === pid || p.id === socket.id);
     if (!player) return;
 
     const chatMsg = {
@@ -407,7 +468,8 @@ io.on("connection", (socket) => {
     const room = getRoom(roomCode);
     if (!room || room.gameState !== GameState.VOTING) return;
 
-    const result = castVote(room, socket.id, targetId);
+    const pid = getPlayerId(socket);
+    const result = castVote(room, pid, targetId);
     if (!result.ok) return socket.emit("VOTE_ERROR", { error: result.reason });
 
     broadcastRoomState(room);
@@ -436,7 +498,7 @@ io.on("connection", (socket) => {
   socket.on("NEXT_ROUND", ({ roomCode }) => {
     const room = getRoom(roomCode);
     if (!room) return;
-    if (socket.id !== room.hostId) return;
+    if (!isHostSocket(socket, room)) return;
 
     if (isGameFinished(room)) {
       finishGame(room);
@@ -457,7 +519,7 @@ io.on("connection", (socket) => {
   socket.on("PLAY_AGAIN", ({ roomCode }) => {
     const room = getRoom(roomCode);
     if (!room) return;
-    if (socket.id !== room.hostId) return;
+    if (!isHostSocket(socket, room)) return;
 
     resetGame(room);
     broadcastRoomState(room);
@@ -467,7 +529,7 @@ io.on("connection", (socket) => {
   socket.on("FORCE_NEXT_PHASE", ({ roomCode }) => {
     const room = getRoom(roomCode);
     if (!room) return;
-    if (socket.id !== room.hostId) return;
+    if (!isHostSocket(socket, room)) return;
 
     const res = forceNextPhase(room);
     if (res && res.tally) {
@@ -493,7 +555,7 @@ io.on("connection", (socket) => {
   socket.on("KICK_PLAYER", ({ roomCode, targetId }) => {
     const room = getRoom(roomCode);
     if (!room) return;
-    if (socket.id !== room.hostId) return;
+    if (!isHostSocket(socket, room)) return;
     if (targetId === room.hostId) return;
 
     removePlayer(room, targetId);

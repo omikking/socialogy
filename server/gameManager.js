@@ -1,5 +1,5 @@
 import { v4 as uuidv4 } from "uuid";
-import { assignWordsToPlayers } from "./wordDatabase.js";
+import { assignWordsToPlayers, getUniquePool, shuffle } from "./wordDatabase.js";
 import { getAllCategories, pickCategoryWords } from "./categories.js";
 
 // ─── Game State Enum ──────────────────────────────────────────
@@ -43,6 +43,7 @@ function createRoom(hostId, hostName, gameMode = "SOCIAL_DEDUCTION") {
     categoryName: null,
     skipTyping: false,
     cardDistribution: "SAME_30", // "SAME_30" or "DIFFERENT_30"
+    sharedWordCards: [],
     players: [
       {
         id: hostId,
@@ -198,10 +199,19 @@ function startRound(room) {
   const activePlayers = room.players.filter((p) => !p.isSpectating);
   const playerIds = activePlayers.map((p) => p.id);
   const cardDistribution = room.cardDistribution || "SAME_30";
-  const assignments = assignWordsToPlayers(playerIds, cardDistribution, 30);
-  for (const [pid, words] of assignments.entries()) {
-    const player = room.players.find((p) => p.id === pid);
-    if (player) player.wordCards = words;
+
+  if (cardDistribution === "SAME_30") {
+    const pool = shuffle(getUniquePool());
+    room.sharedWordCards = pool.slice(0, 30);
+    room.players.forEach((p) => {
+      p.wordCards = [...room.sharedWordCards];
+    });
+  } else {
+    const assignments = assignWordsToPlayers(playerIds, "DIFFERENT_30", 30);
+    for (const [pid, words] of assignments.entries()) {
+      const player = room.players.find((p) => p.id === pid);
+      if (player) player.wordCards = words.slice(0, 30);
+    }
   }
 
   room.gameState = GameState.STORYTELLER_PICK;

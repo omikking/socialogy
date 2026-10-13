@@ -1,6 +1,6 @@
 import { useState } from 'react';
 
-export default function CreateGame({ onBack, onCreate, error, gameMode = 'CATEGORY_IMPOSTER' }) {
+export default function CreateGame({ onBack, onCreate, error, gameMode = 'SOCIAL_DEDUCTION' }) {
   const [name, setName] = useState('');
   const [mode, setMode] = useState(gameMode);
 
@@ -33,24 +33,6 @@ export default function CreateGame({ onBack, onCreate, error, gameMode = 'CATEGO
           }}>
             <button
               type="button"
-              className={`mode-tab ${mode === 'CATEGORY_IMPOSTER' ? 'active' : ''}`}
-              onClick={() => setMode('CATEGORY_IMPOSTER')}
-              style={{
-                flex: 1,
-                padding: '0.5rem',
-                borderRadius: '0.5rem',
-                border: 'none',
-                background: mode === 'CATEGORY_IMPOSTER' ? 'var(--accent-rose, #f43f5e)' : 'transparent',
-                color: '#fff',
-                fontWeight: mode === 'CATEGORY_IMPOSTER' ? 'bold' : 'normal',
-                cursor: 'pointer',
-                fontSize: '0.85rem'
-              }}
-            >
-              🏷️ Category Imposter
-            </button>
-            <button
-              type="button"
               className={`mode-tab ${mode === 'SOCIAL_DEDUCTION' ? 'active' : ''}`}
               onClick={() => setMode('SOCIAL_DEDUCTION')}
               style={{
@@ -66,6 +48,24 @@ export default function CreateGame({ onBack, onCreate, error, gameMode = 'CATEGO
               }}
             >
               🕵️ Social Deduction
+            </button>
+            <button
+              type="button"
+              className={`mode-tab ${mode === 'CATEGORY_IMPOSTER' ? 'active' : ''}`}
+              onClick={() => setMode('CATEGORY_IMPOSTER')}
+              style={{
+                flex: 1,
+                padding: '0.5rem',
+                borderRadius: '0.5rem',
+                border: 'none',
+                background: mode === 'CATEGORY_IMPOSTER' ? 'var(--accent-rose, #f43f5e)' : 'transparent',
+                color: '#fff',
+                fontWeight: mode === 'CATEGORY_IMPOSTER' ? 'bold' : 'normal',
+                cursor: 'pointer',
+                fontSize: '0.85rem'
+              }}
+            >
+              🏷️ Category Imposter
             </button>
           </div>
 

@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import PhaseHeader from './PhaseHeader';
 
 export default function CardSelection({
   roomState,
@@ -15,112 +14,136 @@ export default function CardSelection({
   onKickPlayer,
 }) {
   const [showKickModal, setShowKickModal] = useState(false);
+  const storyteller = roomState?.players?.find((p) => p.id === roomState.storytellerId);
 
   return (
-    <div className="page">
-      <div className="container-wide animate-in" style={{ maxWidth: 720 }}>
-        <PhaseHeader roomState={roomState} />
-
-        {/* Host Control Action Bar */}
-        {isHost && (
-          <div className="glass-card" style={{ padding: '12px 16px', marginBottom: 16, display: 'flex', gap: '10px', alignItems: 'center', justifyContent: 'space-between', background: 'rgba(234, 179, 8, 0.1)', border: '1px solid rgba(234, 179, 8, 0.3)' }}>
-            <span style={{ fontSize: '0.85rem', fontWeight: 'bold', color: '#fde047' }}>👑 Host Controls:</span>
-            <div style={{ display: 'flex', gap: '8px' }}>
-              <button className="btn btn-sm btn-outline" style={{ fontSize: '0.8rem', padding: '4px 10px' }} onClick={() => setShowKickModal(!showKickModal)}>
-                🔴 Kick Players
-              </button>
-              <button className="btn btn-sm btn-primary" style={{ fontSize: '0.8rem', padding: '4px 10px', background: 'var(--accent-rose)' }} onClick={onForceNextPhase}>
-                ⚡ Force Next Phase
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Kick Modal */}
-        {isHost && showKickModal && (
-          <div className="glass-card" style={{ padding: '16px', marginBottom: 16, background: 'rgba(239, 68, 68, 0.15)', border: '1px solid rgba(239, 68, 68, 0.4)' }}>
-            <div style={{ fontWeight: 'bold', marginBottom: 8, fontSize: '0.9rem' }}>Select Inactive Player to Kick:</div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-              {roomState.players.filter(p => p.id !== roomState.hostId).map(p => (
-                <button
-                  key={p.id}
-                  className="btn btn-sm"
-                  style={{ background: 'var(--accent-rose)', color: '#fff', fontSize: '0.8rem' }}
-                  onClick={() => {
-                    onKickPlayer(p.id);
-                    setShowKickModal(false);
-                  }}
-                >
-                  Kick {p.name}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Secret word display */}
-        <div className="glass-card-glow secret-word-display" style={{ marginBottom: 16 }}>
-          <div className="secret-word-label">Your Secret Word</div>
-          <div className="secret-word">{secretWord}</div>
-        </div>
-
-        {/* Word cards grid instruction */}
-        <div style={{ marginBottom: 12 }}>
-          <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', textAlign: 'center', margin: 0 }}>
-            Pick a word from your 30-word grid that relates to your secret word:
-          </p>
-        </div>
-
-        {(!wordCards || wordCards.length === 0) ? (
-          <div style={{ textAlign: 'center', padding: '36px 16px' }}>
-            <div className="waiting-spinner" style={{ margin: '0 auto 16px' }} />
-            <p style={{ color: 'var(--text-secondary)', fontSize: '0.95rem' }}>
-              Loading your 30 word cards...
-            </p>
-            {onRequestCards && (
-              <button
-                className="btn btn-secondary"
-                onClick={onRequestCards}
-                style={{ marginTop: 16 }}
-              >
-                🔄 Load Word Cards
-              </button>
+    <div className="game-screen-wrapper">
+      <div className="game-screen-content animate-in">
+        {/* Compact Header Bar */}
+        <div className="compact-top-bar">
+          <div className="compact-badges">
+            <span className="badge badge-purple" style={{ fontSize: '0.75rem', padding: '3px 8px' }}>
+              Round {roomState?.roundNumber || 1}/{roomState?.maxRounds || 5}
+            </span>
+            {storyteller && (
+              <span className="badge badge-cyan" style={{ fontSize: '0.75rem', padding: '3px 8px' }}>
+                🎭 {storyteller.name}
+              </span>
             )}
           </div>
-        ) : (
-          <div className="word-cards-grid">
-            {wordCards.map((card) => (
-              <div
-                key={card}
-                className={`word-card ${selectedCard === card ? 'selected' : ''} ${answerLocked ? 'word-card-locked' : ''}`}
-                onClick={() => !answerLocked && onSelectCard(card)}
+
+          {/* Prominent Glowing Secret Word Banner */}
+          <div className="compact-secret-pill">
+            <span className="compact-secret-tag">YOUR SECRET WORD:</span>
+            <span className="compact-secret-word">{secretWord || '...'}</span>
+          </div>
+
+          {/* Host Controls Quick Toggle */}
+          {isHost && (
+            <div className="compact-host-controls">
+              <button
+                className="btn btn-sm btn-outline"
+                style={{ fontSize: '0.72rem', padding: '2px 8px', borderRadius: '4px' }}
+                onClick={() => setShowKickModal(!showKickModal)}
+                title="Kick inactive player"
               >
-                {card}
-              </div>
+                🔴 Kick
+              </button>
+              <button
+                className="btn btn-sm btn-primary"
+                style={{ fontSize: '0.72rem', padding: '2px 8px', borderRadius: '4px', background: 'var(--accent-rose)' }}
+                onClick={onForceNextPhase}
+                title="Force skip to next phase"
+              >
+                ⚡ Force Next
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* Kick Modal dropdown if opened */}
+        {isHost && showKickModal && (
+          <div className="glass-card" style={{ padding: '8px 12px', margin: '4px 0', background: 'rgba(239, 68, 68, 0.2)', border: '1px solid rgba(239, 68, 68, 0.5)' }}>
+            <span style={{ fontSize: '0.75rem', fontWeight: 'bold' }}>Kick Inactive Player: </span>
+            {roomState?.players?.filter((p) => p.id !== roomState.hostId).map((p) => (
+              <button
+                key={p.id}
+                className="btn btn-sm"
+                style={{ background: 'var(--accent-rose)', color: '#fff', fontSize: '0.7rem', padding: '2px 6px', margin: '2px' }}
+                onClick={() => {
+                  onKickPlayer(p.id);
+                  setShowKickModal(false);
+                }}
+              >
+                {p.name} ✕
+              </button>
             ))}
           </div>
         )}
 
-        {/* Lock button */}
-        <div className="lock-answer-section" style={{ marginTop: 16 }}>
+        {/* Ultra-slim Instruction bar */}
+        <div className="compact-instruction-bar">
+          <span className="instruction-text">
+            Pick 1 card relating to <strong>&ldquo;{secretWord}&rdquo;</strong> ({wordCards.length}/30 cards):
+          </span>
+          {wordCards.length < 30 && onRequestCards && (
+            <button
+              className="btn btn-sm btn-secondary"
+              onClick={onRequestCards}
+              style={{ fontSize: '0.7rem', padding: '1px 6px', borderRadius: '1rem', marginLeft: '6px' }}
+            >
+              🔄 Refresh 30 Cards
+            </button>
+          )}
+        </div>
+
+        {/* 30 Cards Grid (6x5 on desktop, 5x6 on mobile - all 30 visible at once) */}
+        {(!wordCards || wordCards.length === 0) ? (
+          <div style={{ textAlign: 'center', padding: '24px 0' }}>
+            <div className="waiting-spinner" style={{ margin: '0 auto 8px' }} />
+            <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>Loading your 30 cards...</p>
+            {onRequestCards && (
+              <button className="btn btn-sm btn-secondary" onClick={onRequestCards} style={{ marginTop: 8 }}>
+                🔄 Load Cards
+              </button>
+            )}
+          </div>
+        ) : (
+          <div className="grid-30-cards">
+            {wordCards.slice(0, 30).map((card, idx) => (
+              <button
+                key={`${card}-${idx}`}
+                type="button"
+                className={`grid-word-card ${selectedCard === card ? 'selected' : ''} ${answerLocked ? 'card-locked' : ''}`}
+                onClick={() => !answerLocked && onSelectCard(card)}
+                disabled={answerLocked}
+                title={card}
+              >
+                {card}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* Lock Answer Action Bar right below grid */}
+        <div className="compact-action-bar">
           {answerLocked ? (
-            <div style={{ textAlign: 'center' }}>
-              <span className="badge badge-emerald" style={{ fontSize: '0.9rem', padding: '8px 20px' }}>
-                ✓ Answer Locked
+            <div className="locked-status-pill">
+              <span className="badge badge-emerald" style={{ fontSize: '0.82rem', padding: '6px 16px' }}>
+                ✓ Locked: <strong>{selectedCard}</strong>
               </span>
-              <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginTop: 8 }}>
-                Waiting for other players...
-              </p>
+              <span style={{ color: 'var(--text-secondary)', fontSize: '0.78rem', marginLeft: '10px' }}>
+                Waiting for other players to lock in...
+              </span>
             </div>
           ) : (
             <button
               id="lock-answer-btn"
-              className="btn btn-primary"
+              className={`btn btn-primary compact-lock-btn ${selectedCard ? 'pulse-glow' : ''}`}
               onClick={onLockAnswer}
               disabled={!selectedCard}
-              style={{ width: '100%' }}
             >
-              🔒 Lock Answer
+              {selectedCard ? `🔒 Lock Answer: "${selectedCard}"` : 'Select a word from your 30 cards above'}
             </button>
           )}
         </div>

@@ -16,11 +16,14 @@ import Results from './components/Results';
 import Scoreboard from './components/Scoreboard';
 import FinalResult from './components/FinalResult';
 import PhaseHeader from './components/PhaseHeader';
+import Navbar from './components/Navbar';
+import HelpModal from './components/HelpModal';
 
 function App() {
   // Navigation / view
   const [view, setView] = useState('home'); // home, create, join, game
-  const [selectedMode, setSelectedMode] = useState('CATEGORY_IMPOSTER');
+  const [selectedMode, setSelectedMode] = useState('SOCIAL_DEDUCTION');
+  const [showHelp, setShowHelp] = useState(false);
 
   // Player info
   const [playerId, setPlayerId] = useState(null);
@@ -124,6 +127,9 @@ function App() {
         setSecretWord(data.secretWord);
         setCommonWord(null);
         setImposterWord(null);
+        if (data.wordCards && data.wordCards.length > 0) {
+          setWordCards(data.wordCards);
+        }
       }
     }
 
@@ -350,21 +356,55 @@ function App() {
     setError('');
   }, []);
 
-  // ─── Render ─────────────────────────────────────
-  if (view === 'home') {
-    return (
-      <HomePage
-        onCreateGame={(mode) => {
-          setSelectedMode(mode);
-          setView('create');
-        }}
-        onJoinGame={(mode) => {
-          setSelectedMode(mode);
-          setView('join');
-        }}
-      />
-    );
-  }
+  const handleGoHome = useCallback(() => {
+    localStorage.removeItem('socialogy_session');
+    setView('home');
+    setRoomState(null);
+    setPlayerId(null);
+    setRoomCode('');
+    setWordCards([]);
+    setSelectedCard(null);
+    setAnswerLocked(false);
+    setRole(null);
+    setSecretWord(null);
+    setCommonWord(null);
+    setImposterWord(null);
+    setRoundResult(null);
+    setRevealedAnswers([]);
+    setChatMessages([]);
+    setScores([]);
+    setFinalScores([]);
+    setError('');
+  }, []);
+
+  // Auto-recover complete 30-card hand if fewer cards were received
+  useEffect(() => {
+    if (
+      (roomState?.gameState === 'CARD_SELECTION' || roomState?.gameState === 'STORYTELLER_PICK') &&
+      roomState?.gameMode !== 'CATEGORY_IMPOSTER' &&
+      wordCards.length > 0 &&
+      wordCards.length < 30
+    ) {
+      handleRequestCards();
+    }
+  }, [roomState?.gameState, roomState?.gameMode, wordCards.length, handleRequestCards]);
+
+  // ─── Render View Content ─────────────────────────
+  const renderContent = () => {
+    if (view === 'home') {
+      return (
+        <HomePage
+          onCreateGame={(mode) => {
+            setSelectedMode(mode);
+            setView('create');
+          }}
+          onJoinGame={(mode) => {
+            setSelectedMode(mode);
+            setView('join');
+          }}
+        />
+      );
+    }
 
   if (view === 'create') {
     return (
@@ -626,11 +666,30 @@ function App() {
     );
   }
 
-  return (
-    <div className="page">
-      <div className="container">
-        <p>Unknown game state: {gameState}</p>
+    return (
+      <div className="page">
+        <div className="container">
+          <p>Unknown game state: {gameState}</p>
+        </div>
       </div>
+    );
+  };
+
+  return (
+    <div className="app-layout">
+      <Navbar
+        view={view}
+        roomCode={roomCode}
+        gameMode={roomState?.gameMode || selectedMode}
+        onGoHome={handleGoHome}
+        onOpenHelp={() => setShowHelp(true)}
+      />
+      {renderContent()}
+      <HelpModal
+        isOpen={showHelp}
+        onClose={() => setShowHelp(false)}
+        initialMode={roomState?.gameMode || selectedMode}
+      />
     </div>
   );
 }

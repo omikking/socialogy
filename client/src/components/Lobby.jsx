@@ -96,13 +96,13 @@ export default function Lobby({ roomState, playerId, isHost, onStartGame, onUpda
                 <div className="setting-row">
                   <span className="setting-label">Game Mode</span>
                   <select
-                    className="input"
-                    style={{ width: 'auto', padding: '0.4rem 0.8rem', fontSize: '0.9rem', borderRadius: '0.5rem' }}
-                    value={roomState.gameMode || 'CATEGORY_IMPOSTER'}
+                    className="input lobby-select"
+                    style={{ width: 'auto', padding: '0.45rem 0.9rem', fontSize: '0.9rem', borderRadius: '0.5rem', background: '#161630', color: '#fff' }}
+                    value={roomState.gameMode || 'SOCIAL_DEDUCTION'}
                     onChange={(e) => onUpdateSettings({ gameMode: e.target.value })}
                   >
-                    <option value="CATEGORY_IMPOSTER">🏷️ Category Imposter</option>
                     <option value="SOCIAL_DEDUCTION">🕵️ Social Deduction</option>
+                    <option value="CATEGORY_IMPOSTER">🏷️ Category Imposter</option>
                   </select>
                 </div>
 
@@ -112,8 +112,8 @@ export default function Lobby({ roomState, playerId, isHost, onStartGame, onUpda
                     <div className="setting-row">
                       <span className="setting-label">Category</span>
                       <select
-                        className="input"
-                        style={{ width: 'auto', padding: '0.4rem 0.8rem', fontSize: '0.9rem', borderRadius: '0.5rem' }}
+                        className="input lobby-select"
+                        style={{ width: 'auto', padding: '0.45rem 0.9rem', fontSize: '0.9rem', borderRadius: '0.5rem', background: '#161630', color: '#fff' }}
                         value={roomState.selectedCategory || 'Random'}
                         onChange={(e) => onUpdateSettings({ selectedCategory: e.target.value })}
                       >
@@ -144,12 +144,12 @@ export default function Lobby({ roomState, playerId, isHost, onStartGame, onUpda
                 )}
 
                 {/* Social Deduction Specific Settings */}
-                {roomState.gameMode === 'SOCIAL_DEDUCTION' && (
+                {(roomState.gameMode === 'SOCIAL_DEDUCTION' || !roomState.gameMode) && (
                   <div className="setting-row">
                     <span className="setting-label">Word Grid Mode</span>
                     <select
-                      className="input"
-                      style={{ width: 'auto', padding: '0.4rem 0.8rem', fontSize: '0.85rem', borderRadius: '0.5rem' }}
+                      className="input lobby-select"
+                      style={{ width: 'auto', padding: '0.45rem 0.9rem', fontSize: '0.85rem', borderRadius: '0.5rem', background: '#161630', color: '#fff' }}
                       value={roomState.cardDistribution || 'SAME_30'}
                       onChange={(e) => onUpdateSettings({ cardDistribution: e.target.value })}
                     >

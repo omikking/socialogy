@@ -1,7 +1,7 @@
 import { useState } from 'react';
 
 export default function HomePage({ onCreateGame, onJoinGame }) {
-  const [selectedMode, setSelectedMode] = useState('CATEGORY_IMPOSTER');
+  const [selectedMode, setSelectedMode] = useState('SOCIAL_DEDUCTION');
 
   return (
     <div className="page">
@@ -46,7 +46,7 @@ export default function HomePage({ onCreateGame, onJoinGame }) {
               Social Deduction
             </h3>
             <p style={{ fontSize: '0.875rem', color: 'rgba(255, 255, 255, 0.7)', margin: 0, lineHeight: 1.4 }}>
-              Classic Secret Word Imposter with 12 word cards, Storyteller picks, and clue submission.
+              Classic Secret Word Imposter with 30 word cards, Storyteller picks, and clue submission.
             </p>
             {selectedMode === 'SOCIAL_DEDUCTION' && (
               <span className="badge" style={{
